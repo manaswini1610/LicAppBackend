@@ -1,10 +1,8 @@
-import dotenv from "dotenv";
+import "dotenv/config";
 import mongoose from "mongoose";
 import connectDB from "../src/config/db.js";
 import Policy from "../src/models/Policy.model.js";
 import FollowUp from "../src/models/FollowUp.model.js";
-
-dotenv.config();
 
 const run = async () => {
   await connectDB();

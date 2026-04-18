@@ -2,6 +2,9 @@
   "name": "licappbackend",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",

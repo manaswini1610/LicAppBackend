@@ -1,8 +1,7 @@
-import dotenv from "dotenv";
+// Load .env before any other project imports (ESM runs static imports before `dotenv.config()` in the body).
+import "dotenv/config";
 import app from "./src/app.js";
 import connectDB from "./src/config/db.js";
-
-dotenv.config();
 
 const PORT = process.env.PORT || 5000;
 

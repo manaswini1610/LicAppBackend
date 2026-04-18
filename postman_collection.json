@@ -1,0 +1,61 @@
+{
+  "info": {
+    "name": "Insurance Policy Management API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Dashboard Summary",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/dashboard/summary"
+      }
+    },
+    {
+      "name": "Recent Policies",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/dashboard/recent-policies?limit=10"
+      }
+    },
+    {
+      "name": "Create Policy",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"policyNumber\": \"POL5001\",\n  \"customerName\": \"Ravi Kumar\",\n  \"customerPhone\": \"9876543210\",\n  \"customerEmail\": \"ravi@example.com\",\n  \"policyType\": \"health\",\n  \"premiumAmount\": 15000,\n  \"startDate\": \"2026-04-01\",\n  \"endDate\": \"2027-03-31\",\n  \"status\": \"active\",\n  \"agentName\": \"Agent A\",\n  \"notes\": \"Corporate health plan\"\n}"
+        },
+        "url": "{{baseUrl}}/api/policies"
+      }
+    },
+    {
+      "name": "List Policies",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/policies?page=1&limit=10&search=POL&status=active"
+      }
+    },
+    {
+      "name": "Create Follow-up",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"policyId\": \"6613d4d22f9d4f2eac012345\",\n  \"followUpDate\": \"2026-04-10\",\n  \"followUpType\": \"renewal reminder\",\n  \"remark\": \"Call customer for renewal\",\n  \"priority\": \"high\",\n  \"status\": \"pending\",\n  \"assignedTo\": \"Agent A\"\n}"
+        },
+        "url": "{{baseUrl}}/api/followups"
+      }
+    },
+    {
+      "name": "Pending Followups Today",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/followups/pending/today"
+      }
+    }
+  ],
+  "variable": [{ "key": "baseUrl", "value": "http://localhost:5000" }]
+}

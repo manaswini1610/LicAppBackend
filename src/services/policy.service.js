@@ -24,7 +24,7 @@ const generatePolicyNumber = async () => {
   throw new ApiError(500, "Could not generate unique policy number", "POLICY_NUMBER_GENERATION_FAILED");
 };
 
-const buildPolicyFilters = (query) => {
+export const buildPolicyFilters = (query) => {
   const {
     search,
     status,
@@ -75,14 +75,33 @@ const buildPolicyFilters = (query) => {
   return filters;
 };
 
+/** Pending count on dashboard matches GET /policies filters (default: status pending + followUpRange upcoming). */
+export const buildPendingPoliciesDashboardFilters = (query) => {
+  const scope = query.pendingCountScope;
+  if (scope === "all") {
+    return { status: "pending" };
+  }
+  const followUpRange = query.followUpRange ?? "upcoming";
+  return buildPolicyFilters({
+    ...query,
+    status: "pending",
+    followUpRange,
+  });
+};
+
 export const createPolicyService = async (payload) => {
   const { policyNumber: _, ...body } = payload;
   const policyNumber = await generatePolicyNumber();
-  const policy = await Policy.create({
+  const status = normalizePolicyStatus(body.status);
+  const doc = {
     ...body,
-    status: normalizePolicyStatus(body.status),
+    status,
     policyNumber,
-  });
+  };
+  if (status === "converted_to_client") {
+    doc.convertedAt = new Date();
+  }
+  const policy = await Policy.create(doc);
   return policy;
 };
 
@@ -120,10 +139,17 @@ export const updatePolicyService = async (policyId, payload) => {
     if (duplicate) throw new ApiError(409, "Policy number already exists", "POLICY_NUMBER_EXISTS");
   }
 
+  const existing = await Policy.findById(policyId).select("status");
+  if (!existing) throw new ApiError(404, "Policy not found", "POLICY_NOT_FOUND");
+
   const updatePayload = {
     ...payload,
     status: normalizePolicyStatus(payload.status),
   };
+
+  if (updatePayload.status === "converted_to_client" && existing.status !== "converted_to_client") {
+    updatePayload.convertedAt = new Date();
+  }
 
   const policy = await Policy.findByIdAndUpdate(policyId, updatePayload, {
     new: true,
@@ -134,11 +160,16 @@ export const updatePolicyService = async (policyId, payload) => {
 };
 
 export const updatePolicyStatusService = async (policyId, status) => {
-  const policy = await Policy.findByIdAndUpdate(
-    policyId,
-    { status: normalizePolicyStatus(status) },
-    { new: true, runValidators: true }
-  );
+  const normalized = normalizePolicyStatus(status);
+  const existing = await Policy.findById(policyId).select("status");
+  if (!existing) throw new ApiError(404, "Policy not found", "POLICY_NOT_FOUND");
+
+  const update = { status: normalized };
+  if (normalized === "converted_to_client" && existing.status !== "converted_to_client") {
+    update.convertedAt = new Date();
+  }
+
+  const policy = await Policy.findByIdAndUpdate(policyId, update, { new: true, runValidators: true });
   if (!policy) throw new ApiError(404, "Policy not found", "POLICY_NOT_FOUND");
   return policy;
 };

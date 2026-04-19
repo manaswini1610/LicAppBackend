@@ -21,6 +21,8 @@ const policySchema = new mongoose.Schema(
       enum: ["pending", "converted_to_client"],
       default: "pending",
     },
+    /** Set when status becomes converted_to_client; used for yearly progress and monthly charts */
+    convertedAt: { type: Date },
     agentName: { type: String, trim: true },
     notes: { type: String, trim: true },
   },

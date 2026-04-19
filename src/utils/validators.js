@@ -95,7 +95,36 @@ export const listFollowUpsValidation = [
 
 export const recentPolicyValidation = [query("limit").optional().isInt({ min: 1, max: 100 })];
 
+/** Same optional filters as list policies, plus how to count pending on dashboard cards */
+export const dashboardPendingCountQueryValidation = [
+  query("pendingCountScope").optional().isIn(["all", "list"]),
+  query("followUpRange").optional().isIn(["today", "upcoming"]),
+];
+
 export const dashboardOverviewValidation = [
   query("yearlyTarget").optional().isInt({ min: 1, max: 1000000 }),
   query("targetPerMonth").optional().isInt({ min: 1, max: 1000000 }),
+  ...dashboardPendingCountQueryValidation,
+];
+
+export const dashboardSummaryValidation = [...dashboardPendingCountQueryValidation];
+
+export const registerValidation = [
+  body("username").trim().isLength({ min: 3, max: 32 }).withMessage("username must be 3–32 characters"),
+  body("password").isLength({ min: 6, max: 128 }).withMessage("password must be 6–128 characters"),
+  body("name").trim().notEmpty().isLength({ max: 120 }).withMessage("name is required (max 120 characters)"),
+  body("experience")
+    .optional({ checkFalsy: true })
+    .isInt({ min: 0, max: 60 })
+    .withMessage("experience must be a number of years from 0 to 60"),
+  body("mobileNumber")
+    .trim()
+    .notEmpty()
+    .matches(/^[0-9]{10}$/)
+    .withMessage("mobileNumber must be exactly 10 digits"),
+];
+
+export const loginValidation = [
+  body("username").trim().notEmpty().withMessage("username is required"),
+  body("password").notEmpty().withMessage("password is required"),
 ];

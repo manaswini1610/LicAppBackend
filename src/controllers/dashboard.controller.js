@@ -1,33 +1,54 @@
 import Policy from "../models/Policy.model.js";
 import FollowUp from "../models/FollowUp.model.js";
+import { buildPendingPoliciesDashboardFilters } from "../services/policy.service.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { successResponse } from "../utils/response.js";
 
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 export const getSummary = asyncHandler(async (req, res) => {
-  const [policyStats, totalFollowUpsPending] = await Promise.all([
+  const [policyStats, totalFollowUpsPending, pendingPolicies] = await Promise.all([
     Policy.aggregate([
       {
         $facet: {
           totalPolicies: [{ $count: "count" }],
-          pendingPolicies: [{ $match: { status: "pending" } }, { $count: "count" }],
-          convertedToClientPolicies: [{ $match: { status: "converted_to_client" } }, { $count: "count" }],
+          convertedToClientPolicies: [
+            { $match: { status: "converted_to_client" } },
+            { $count: "count" },
+          ],
         },
       },
     ]),
     FollowUp.countDocuments({ status: "pending" }),
+    Policy.countDocuments(buildPendingPoliciesDashboardFilters(req.query)),
   ]);
 
   const stats = policyStats[0] || {};
-  const countValue = (arr) => (arr?.[0]?.count ? arr[0].count : 0);
+  const countValue = (arr) => (arr?.[0]?.count != null ? arr[0].count : 0);
+
+  const converted = countValue(stats.convertedToClientPolicies);
 
   return successResponse(res, {
     message: "Dashboard summary fetched successfully",
     data: {
       totalPolicies: countValue(stats.totalPolicies),
-      pendingPolicies: countValue(stats.pendingPolicies),
-      convertedToClientPolicies: countValue(stats.convertedToClientPolicies),
+      totalLeads: countValue(stats.totalPolicies),
+      pendingPolicies,
+      convertedToClientPolicies: converted,
+      completedPolicies: converted,
       totalFollowUpsPending,
     },
   });
@@ -71,19 +92,48 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
   const yearlyTarget = Number(req.query.yearlyTarget);
   const targetPerMonth = Number(req.query.targetPerMonth);
   const normalizedTargetPerMonth =
-    Number.isFinite(targetPerMonth) && targetPerMonth > 0 ? Math.floor(targetPerMonth) : null;
+    Number.isFinite(targetPerMonth) && targetPerMonth > 0
+      ? Math.floor(targetPerMonth)
+      : null;
   const normalizedYearlyTarget = normalizedTargetPerMonth
     ? normalizedTargetPerMonth * 12
     : Number.isFinite(yearlyTarget) && yearlyTarget > 0
       ? Math.floor(yearlyTarget)
       : 360;
 
-  const [convertedToClientPolicies, pendingPolicies, monthlySubmissionRaw, upcomingFollowUps] = await Promise.all([
+  /** Date used for “submitted / converted this year”: conversion time, or creation time if legacy (no convertedAt). */
+  const ytdConvertedMatch = {
+    status: "converted_to_client",
+    $expr: {
+      $and: [
+        { $gte: [{ $ifNull: ["$convertedAt", "$createdAt"] }, startOfYear] },
+        { $lt: [{ $ifNull: ["$convertedAt", "$createdAt"] }, startOfNextYear] },
+      ],
+    },
+  };
+
+  const [
+    convertedToClientPoliciesAllTime,
+    submittedPoliciesThisYear,
+    totalPolicies,
+    pendingPolicies,
+    monthlySubmissionRaw,
+    upcomingFollowUps,
+  ] = await Promise.all([
     Policy.countDocuments({ status: "converted_to_client" }),
-    Policy.countDocuments({ status: "pending" }),
+    Policy.countDocuments(ytdConvertedMatch),
+    Policy.countDocuments({}),
+    Policy.countDocuments(buildPendingPoliciesDashboardFilters(req.query)),
     Policy.aggregate([
-      { $match: { createdAt: { $gte: startOfYear, $lt: startOfNextYear }, status: "converted_to_client" } },
-      { $group: { _id: { $month: "$createdAt" }, submitted: { $sum: 1 } } },
+      { $match: ytdConvertedMatch },
+      {
+        $addFields: {
+          effectiveMonth: {
+            $month: { $ifNull: ["$convertedAt", "$createdAt"] },
+          },
+        },
+      },
+      { $group: { _id: "$effectiveMonth", submitted: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]),
     FollowUp.find({ status: "pending", followUpDate: { $gte: todayStart } })
@@ -92,20 +142,27 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
       .populate("policyId", "customerName policyType"),
   ]);
 
-  const monthToSubmitted = new Map(monthlySubmissionRaw.map((item) => [item._id, item.submitted]));
-  const monthlyTarget = normalizedTargetPerMonth ?? Math.max(1, Math.ceil(normalizedYearlyTarget / 12));
+  const monthToSubmitted = new Map(
+    monthlySubmissionRaw.map((item) => [item._id, item.submitted]),
+  );
+  const monthlyTarget =
+    normalizedTargetPerMonth ??
+    Math.max(1, Math.ceil(normalizedYearlyTarget / 12));
   const monthlyProgress = MONTH_NAMES.map((month, idx) => {
     const submitted = monthToSubmitted.get(idx + 1) || 0;
-    const progressPct = monthlyTarget > 0 ? Math.round((submitted / monthlyTarget) * 100) : 0;
+    const progressPct =
+      monthlyTarget > 0 ? Math.round((submitted / monthlyTarget) * 100) : 0;
     const remaining = Math.max(monthlyTarget - submitted, 0);
     let achievementMessage = `You are behind by ${remaining}. Please complete ${remaining} more this month.`;
 
     if (submitted === monthlyTarget) {
-      achievementMessage = "Congrats! You reached this month's target. Keep this pace for next month too.";
+      achievementMessage =
+        "Congrats! You reached this month's target. Keep this pace for next month too.";
     }
 
     if (submitted > monthlyTarget) {
-      achievementMessage = "Excellent! You did more than this month's target. Keep going like this.";
+      achievementMessage =
+        "Excellent! You did more than this month's target. Keep going like this.";
     }
 
     return {
@@ -117,12 +174,21 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
     };
   });
 
-  const remainingForYear = Math.max(normalizedYearlyTarget - convertedToClientPolicies, 0);
+  /** Full calendar months strictly after the current month (e.g. April → 8 = May–Dec); minimum 1 in December. */
   const monthsLeft = Math.max(12 - (now.getMonth() + 1), 1);
+
+  const remainingForYear = Math.max(
+    normalizedYearlyTarget - submittedPoliciesThisYear,
+    0,
+  );
   const requiredPerMonth = Math.ceil(remainingForYear / monthsLeft);
   const annualProgressPercent = Math.min(
-    normalizedYearlyTarget > 0 ? Math.round((convertedToClientPolicies / normalizedYearlyTarget) * 1000) / 10 : 0,
-    100
+    normalizedYearlyTarget > 0
+      ? Math.round(
+          (submittedPoliciesThisYear / normalizedYearlyTarget) * 1000,
+        ) / 10
+      : 0,
+    100,
   );
 
   const formattedUpcomingFollowUps = upcomingFollowUps.map((followUp) => ({
@@ -139,15 +205,26 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
     data: {
       stats: {
         yearlyTarget: normalizedYearlyTarget,
-        convertedToClientPolicies,
+        totalLeads: totalPolicies,
+        completedPolicies: convertedToClientPoliciesAllTime,
         pendingPolicies,
-        requiredPerMonth,
       },
       annualProgress: {
+        yearlyTarget: normalizedYearlyTarget,
+        submittedPoliciesThisYear,
         progressPercent: annualProgressPercent,
         remainingForYear,
         monthsLeft,
         requiredPerMonth,
+        calculation: {
+          progressPercent:
+            "min(100, round((submittedPoliciesThisYear / yearlyTarget) * 1000) / 10); uses policies converted this calendar year vs annual target",
+          remainingForYear: "max(0, yearlyTarget - submittedPoliciesThisYear)",
+          monthsLeft:
+            "number of full calendar months after the current month until year-end (minimum 1 in December); used for pacing",
+          requiredPerMonth:
+            "ceil(remainingForYear / monthsLeft); average policies still needed per remaining month to reach the annual target",
+        },
       },
       monthlyProgress,
       upcomingFollowUps: formattedUpcomingFollowUps,

@@ -1,3 +1,5 @@
+// Load first: Vercel and other hosts run this file without server.js, so .env must load here too.
+import "./config/loadEnv.js";
 import express from "express";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";

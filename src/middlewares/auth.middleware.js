@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import ApiError from "../utils/ApiError.js";
+import { requireJwtSecret } from "../utils/jwtSecret.js";
 
 /**
  * Requires `Authorization: Bearer <JWT>` from login/register.
@@ -23,10 +24,7 @@ export const authenticate = (req, res, next) => {
       );
     }
     const token = tokenMatch[1].trim();
-    const secret = typeof process.env.JWT_SECRET === "string" ? process.env.JWT_SECRET.trim() : "";
-    if (!secret) {
-      throw new ApiError(500, "JWT_SECRET is not configured", "CONFIG_ERROR");
-    }
+    const secret = requireJwtSecret();
     const payload = jwt.verify(token, secret);
     req.user = {
       id: payload.sub,

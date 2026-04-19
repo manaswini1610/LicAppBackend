@@ -3,14 +3,12 @@ import bcrypt from "bcryptjs";
 import User from "../models/User.model.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
+import { requireJwtSecret } from "../utils/jwtSecret.js";
 import { successResponse } from "../utils/response.js";
 
 /** JWT payload includes `username`, `name`, and `sub` (user id). Password is never stored in the token. */
 function signToken(user) {
-  const secret = typeof process.env.JWT_SECRET === "string" ? process.env.JWT_SECRET.trim() : "";
-  if (!secret) {
-    throw new ApiError(500, "JWT_SECRET is not configured", "CONFIG_ERROR");
-  }
+  const secret = requireJwtSecret();
 
   return jwt.sign(
     {

@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "../src/config/loadEnv.js";
 import mongoose from "mongoose";
 import connectDB from "../src/config/db.js";
 import Policy from "../src/models/Policy.model.js";

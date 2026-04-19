@@ -1,5 +1,5 @@
-// Load .env before any other project imports (ESM runs static imports before `dotenv.config()` in the body).
-import "dotenv/config";
+// Load .env from project root (not process.cwd()) so `node /path/to/server.js` from any cwd still works.
+import "./src/config/loadEnv.js";
 import app from "./src/app.js";
 import connectDB from "./src/config/db.js";
 
